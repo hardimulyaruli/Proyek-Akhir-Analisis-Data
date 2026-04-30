@@ -42,7 +42,9 @@ def categorize_installments(value):
 
     if installments == 1:
         return 'Lunas (1x)'
-    return 'Cicilan (>1x)'
+    if installments > 3:
+        return 'Cicilan (>3x)'
+    return 'Cicilan 2-3x'
 
 
 datasets = load_datasets()
@@ -71,10 +73,10 @@ else:
         q1_result = (
             cc_data.groupby('payment_category', as_index=False)['payment_value']
             .mean()
-            .query("payment_category in ['Lunas (1x)', 'Cicilan (>1x)']")
+            .query("payment_category in ['Lunas (1x)', 'Cicilan (>3x)']")
         )
         avg_lunas = q1_result.loc[q1_result['payment_category'] == 'Lunas (1x)', 'payment_value']
-        avg_cicilan = q1_result.loc[q1_result['payment_category'] == 'Cicilan (>1x)', 'payment_value']
+        avg_cicilan = q1_result.loc[q1_result['payment_category'] == 'Cicilan (>3x)', 'payment_value']
         if not avg_lunas.empty and not avg_cicilan.empty and avg_lunas.iloc[0] != 0:
             diff_pct = ((avg_cicilan.iloc[0] - avg_lunas.iloc[0]) / avg_lunas.iloc[0]) * 100
 
@@ -100,7 +102,7 @@ else:
         st.subheader('Ringkasan Pertanyaan Bisnis')
         st.markdown(
             'Dashboard ini hanya memuat visualisasi yang dipakai untuk menjawab pertanyaan bisnis utama: '
-            'perbandingan nilai transaksi kartu kredit pada pembayaran lunas vs cicilan, serta sebaran pelanggan '
+            'perbandingan nilai transaksi kartu kredit pada pembayaran lunas (1x) vs cicilan (>3x), serta sebaran pelanggan unik '
             'di luar Sao Paulo.'
         )
     with overview_right:
@@ -112,8 +114,8 @@ else:
     tab1, tab2 = st.tabs(['Pertanyaan 1', 'Pertanyaan 2'])
 
     with tab1:
-        st.subheader('Bagaimana perbandingan rata-rata nominal transaksi kartu kredit antara lunas dan cicilan?')
-        st.caption('Analisis hanya menggunakan transaksi dengan payment_type = credit_card.')
+        st.subheader('Bagaimana perbandingan rata-rata nominal transaksi kartu kredit antara pembayaran lunas (1x) dan cicilan (>3x)?')
+        st.caption('Analisis hanya menggunakan transaksi kartu kredit dengan 1x cicilan (lunas) vs lebih dari 3x cicilan.')
 
         q1_metric_1, q1_metric_2, q1_metric_3 = st.columns(3)
         if avg_lunas is not None and not avg_lunas.empty:
@@ -122,14 +124,14 @@ else:
             q1_metric_1.metric('Rata-rata Lunas (1x)', 'N/A')
 
         if avg_cicilan is not None and not avg_cicilan.empty:
-            q1_metric_2.metric('Rata-rata Cicilan (>1x)', f"{avg_cicilan.iloc[0]:.2f}")
+            q1_metric_2.metric('Rata-rata Cicilan (>3x)', f"{avg_cicilan.iloc[0]:.2f}")
         else:
-            q1_metric_2.metric('Rata-rata Cicilan (>1x)', 'N/A')
+            q1_metric_2.metric('Rata-rata Cicilan (>3x)', 'N/A')
 
         if diff_pct is not None:
-            q1_metric_3.metric('Selisih cicilan vs lunas', f'{diff_pct:.1f}%')
+            q1_metric_3.metric('Selisih >3x vs 1x', f'{diff_pct:.1f}%')
         else:
-            q1_metric_3.metric('Selisih cicilan vs lunas', 'N/A')
+            q1_metric_3.metric('Selisih >3x vs 1x', 'N/A')
 
         if not q1_result.empty:
             q1_fig = px.bar(
@@ -138,7 +140,7 @@ else:
                 y='payment_value',
                 color='payment_category',
                 text='payment_value',
-                category_orders={'payment_category': ['Lunas (1x)', 'Cicilan (>1x)']},
+                category_orders={'payment_category': ['Lunas (1x)', 'Cicilan (>3x)']},
                 color_discrete_sequence=['#2E86AB', '#F18F01'],
             )
             q1_fig.update_traces(texttemplate='%{text:.2f}', textposition='outside')
