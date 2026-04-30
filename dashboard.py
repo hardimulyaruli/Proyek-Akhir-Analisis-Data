@@ -1,296 +1,144 @@
 import streamlit as st
 import pandas as pd
-import numpy as np
-import matplotlib.pyplot as plt
-import seaborn as sns
 import plotly.express as px
-import plotly.graph_objects as go
-from datetime import datetime
 import os
 
-# Set page configuration
-st.set_page_config(
-    page_title="E-Commerce Data Dashboard",
-    page_icon=":material/bar_chart:",
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
 
-# Custom CSS
-st.markdown("""
-    <style>
-    .main-header {
-        font-size: 2.5rem;
-        color: #1f77b4;
-        font-weight: bold;
-        text-align: center;
-        margin-bottom: 2rem;
-    }
-    .metric-card {
-        background-color: #f0f2f6;
-        padding: 1.5rem;
-        border-radius: 0.5rem;
-        box-shadow: 0 0 10px rgba(0,0,0,0.1);
-    }
-    </style>
-""", unsafe_allow_html=True)
+# Simple Streamlit dashboard implementing notebook EDA
+st.set_page_config(page_title="E-Commerce EDA Dashboard", layout="wide")
+
+st.title("E-Commerce EDA Dashboard")
+st.caption("Ringkasan interaktif berdasarkan Proyek_Analisis_Data.ipynb")
 
 
-# Title
-st.markdown("## :material/bar_chart: E-Commerce Data Dashboard")
-st.caption("Dashboard interaktif berdasarkan hasil analisis Proyek_Analisis_Data")
-
-# Sidebar
-st.sidebar.title(":material/menu: Navigasi Dashboard")
-st.sidebar.markdown("---")
-
-# Load data function
 @st.cache_data
-def load_data():
-    """Load data from main_data.csv"""
-    try:
-        # Load main_data.csv
-        if os.path.exists('main_data.csv'):
-            main_df = pd.read_csv('main_data.csv')
-            
-            # Convert datetime columns if needed
-            datetime_columns = ["order_purchase_timestamp", "order_approved_at",
-                                "order_delivered_carrier_date", "order_delivered_customer_date",
-                                "order_estimated_delivery_date", "review_creation_date", 
-                                "review_answer_timestamp"]
-            for column in datetime_columns:
-                if column in main_df.columns:
-                    main_df[column] = pd.to_datetime(main_df[column], errors='coerce')
-            
-            return main_df
-        else:
-            st.error("File main_data.csv tidak ditemukan.")
-            st.info("Silakan jalankan: python prepare_data.py")
-            st.info("Atau letakkan main_data.csv di folder yang sama dengan app.py")
-            return None
-    
-    except Exception as e:
-        st.error(f"Error membaca file: {e}")
-        return None
+def load_datasets():
+    # try common paths inside workspace
+    base_paths = [
+        os.path.join('..', 'data'),
+        'data',
+        '..',
+        '.'
+    ]
 
-# Load data
-data = load_data()
+    files = {
+        'customers': ['customers_dataset.csv'],
+        'payments': ['order_payments_dataset.csv', 'main_data.csv'],
+        'translation': ['product_category_name_translation.csv']
+    }
 
-if data is not None:
-    # Prepare aggregated data for visualizations
-    
-    # 1. Top Categories
-    top_categories_df = data.groupby('product_category_name_english').size().reset_index(name='order_count')
-    top_categories_df = top_categories_df.sort_values('order_count', ascending=False).head(10)
-    
-    # 2. Monthly Orders
-    orders_df = data[['order_id', 'order_purchase_timestamp']].drop_duplicates()
-    orders_df['order_purchase_timestamp'] = pd.to_datetime(orders_df['order_purchase_timestamp'])
-    monthly_orders_df = orders_df.set_index('order_purchase_timestamp').resample('ME').size().reset_index(name='order_count')
-    monthly_orders_df.rename(columns={'order_purchase_timestamp': 'order_date'}, inplace=True)
-    
-    # 3. Customer by State
-    customers_state_df = data[['customer_id', 'customer_state']].drop_duplicates()
-    bystate_df = customers_state_df.groupby('customer_state').size().reset_index(name='customer_count')
-    bystate_df = bystate_df.sort_values('customer_count', ascending=False).head(10)
-    
-    # Main content
-    col1, col2, col3 = st.columns(3)
-    
-    with col1:
-        st.metric(
-            label=":material/shopping_bag: Total Pesanan",
-            value=f"{data['order_id'].nunique():,}",
-            delta="Semua waktu"
-        )
-    
-    with col2:
-        st.metric(
-            label=":material/group: Total Pelanggan",
-            value=f"{data['customer_id'].nunique():,}",
-            delta="Unik"
-        )
-    
-    with col3:
-        st.metric(
-            label=":material/local_offer: Kategori Produk",
-            value=f"{data['product_category_name_english'].nunique():,}",
-            delta="Berbeda"
-        )
-    
-    st.markdown("---")
+    loaded = {}
+    for key, candidates in files.items():
+        df = None
+        for base in base_paths:
+            for name in candidates:
+                path = os.path.join(base, name)
+                if os.path.exists(path):
+                    try:
+                        df = pd.read_csv(path)
+                        loaded[key] = df
+                        raise StopIteration
+                    except StopIteration:
+                        break
+                    except Exception:
+                        df = None
+            if df is not None:
+                break
+        if df is None:
+            loaded[key] = None
 
-    summary_col1, summary_col2 = st.columns([1, 1])
-    with summary_col1:
-        st.markdown("### :material/insights: Kesimpulan Analisis")
-        st.write(
-            """
-            - Kategori produk terlaris pada notebook adalah **bed_bath_table**, **health_beauty**, dan **sports_leisure**.
-            - Tren pesanan menunjukkan lonjakan pada **November 2017** yang sangat mungkin terkait **Black Friday**.
-            - Pelanggan paling banyak berasal dari **Sao Paulo (SP)**, diikuti **Minas Gerais (MG)** dan **Rio de Janeiro (RJ)**.
-            """
-        )
-    with summary_col2:
-        st.markdown("### :material/assignment: Rekomendasi Action Item")
-        st.write(
-            """
-            - Optimasi stok untuk kategori kebutuhan rumah tangga dan perawatan diri.
-            - Siapkan kampanye promosi lebih awal sebelum periode Black Friday.
-            - Fokus pada wilayah SP untuk efisiensi logistik dan loyalitas pelanggan.
-            """
-        )
-    
-    # Tabs for different visualizations
-    tab1, tab2, tab3, tab4 = st.tabs([
-        ":material/category: Kategori Produk", 
-        ":material/monitoring: Tren Bulanan", 
-        ":material/public: Distribusi Pelanggan",
-        ":material/database: Dataset Info"
-    ])
-    
-    # Tab 1: Top Product Categories
-    with tab1:
-        st.subheader("10 Kategori Produk Terlaris")
-        
-        col1, col2 = st.columns([2, 1])
-        
-        with col1:
-            # Bar chart
-            fig1 = px.bar(
-                top_categories_df,
-                x='order_count',
-                y='product_category_name_english',
-                orientation='h',
-                title='10 Kategori Produk Terlaris',
-                labels={'product_category_name_english': 'Kategori', 'order_count': 'Jumlah Pesanan'},
-                color='order_count',
-                color_continuous_scale='Viridis',
-                text='order_count'
-            )
-            fig1.update_traces(textposition='auto')
-            fig1.update_layout(height=500, yaxis={'categoryorder':'total ascending'})
-            st.plotly_chart(fig1, use_container_width=True)
-        
-        with col1:
-            st.markdown("### :material/lightbulb: Insight")
-            st.write(f"""
-            - Hasil notebook menunjukkan tiga kategori utama adalah **bed_bath_table**, **health_beauty**, dan **sports_leisure**.
-            - Kategori tersebut konsisten dengan pola pembelian untuk kebutuhan rumah tangga, perawatan diri, dan gaya hidup.
-            - Grafik ini membantu memprioritaskan stok pada kategori dengan permintaan tertinggi.
-            """)
-    
-    # Tab 2: Monthly Trends
-    with tab2:
-        st.subheader("Tren Jumlah Pesanan per Bulan")
-        
-        col1, col2 = st.columns([3, 1])
-        
-        with col1:
-            # Line chart
-            fig2 = px.line(
-                monthly_orders_df,
-                x='order_date',
-                y='order_count',
-                title='Tren Penjualan Bulanan',
-                labels={'order_date': 'Bulan', 'order_count': 'Jumlah Pesanan'},
-                markers=True,
-                color_discrete_sequence=['#1f77b4']
-            )
-            fig2.update_layout(height=450)
-            fig2.update_traces(line=dict(width=3), marker=dict(size=8))
-            st.plotly_chart(fig2, use_container_width=True)
-        
-        with col2:
-            st.markdown("### :material/query_stats: Statistik")
-            st.metric("Rata-rata Pesanan/Bulan", f"{monthly_orders_df['order_count'].mean():.0f}")
-            st.metric("Puncak Pesanan", f"{monthly_orders_df['order_count'].max():,}")
-            st.metric("Terendah Pesanan", f"{monthly_orders_df['order_count'].min():,}")
-        
-        col1, col2 = st.columns([1, 1])
-        with col1:
-            st.markdown("### :material/trending_up: Insight Tren")
-            max_month = monthly_orders_df.loc[monthly_orders_df['order_count'].idxmax(), 'order_date']
-            st.write(f"""
-            - Analisis notebook menunjukkan pertumbuhan pesanan yang kuat sepanjang periode pengamatan.
-            - **Puncak pesanan** terjadi pada bulan {max_month.strftime('%B %Y')} dan selaras dengan lonjakan promo akhir tahun.
-            - Periode ini perlu dipersiapkan dengan stok dan kapasitas logistik yang lebih besar.
-            """)
-        
-        with col2:
-            st.markdown("### :material/target: Rekomendasi")
-            st.write("""
-            - Optimalkan persediaan sebelum November.
-            - Persiapkan kampanye pemasaran sejak Oktober.
-            - Tingkatkan kapasitas fulfillment untuk menjaga kualitas pengiriman.
-            """)
-    
-    # Tab 3: Customer Distribution by State
-    with tab3:
-        st.subheader("Distribusi Pelanggan per Negara Bagian")
-        
-        col1, col2 = st.columns([2, 1])
-        
-        with col1:
-            # Bar chart
-            fig3 = px.bar(
-                bystate_df,
-                x='customer_count',
-                y='customer_state',
-                orientation='h',
-                title='10 State dengan Jumlah Pelanggan Terbanyak',
-                labels={'customer_state': 'State', 'customer_count': 'Jumlah Pelanggan'},
-                color='customer_count',
-                color_continuous_scale='sunset',
-                text='customer_count'
-            )
-            fig3.update_traces(textposition='auto')
-            fig3.update_layout(height=450, yaxis={'categoryorder':'total ascending'})
-            st.plotly_chart(fig3, use_container_width=True)
-        
-        with col1:
-            st.markdown("### :material/globe_asia: Insight Geografis")
-            sp_percentage = (bystate_df.iloc[0]['customer_count'] / bystate_df['customer_count'].sum()) * 100
-            st.write(f"""
-            - **São Paulo (SP)** mendominasi dengan {bystate_df.iloc[0]['customer_count']:,} pelanggan ({sp_percentage:.1f}% dari top 10).
-            - Tiga state teratas pada notebook adalah **SP**, **MG**, dan **RJ**.
-            - Konsentrasi pelanggan di SP menunjukkan pusat aktivitas e-commerce masih sangat terpusat di wilayah tersebut.
-            """)
-    
-    # Tab 4: Dataset Info
-    with tab4:
-        st.subheader("Informasi Dataset")
-        
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            st.markdown("### :material/view_agenda: Dimensi Data")
-            st.write(f"- **Total Baris:** {data.shape[0]:,}")
-            st.write(f"- **Total Kolom:** {data.shape[1]}")
-            st.write(f"- **Periode Data:** {data['order_purchase_timestamp'].min().strftime('%B %Y')} - {data['order_purchase_timestamp'].max().strftime('%B %Y')}")
-        
-        with col2:
-            st.markdown("### :material/verified: Kualitas Data")
-            missing_pct = (data.isnull().sum().sum() / (data.shape[0] * data.shape[1])) * 100
-            st.write(f"- **Missing Values:** {missing_pct:.2f}%")
-            st.write(f"- **Memory Usage:** {data.memory_usage(deep=True).sum() / 1024**2:.2f} MB")
-        
-        st.markdown("---")
-        st.markdown("### :material/table_chart: Kolom-Kolom Utama")
-        col_info = pd.DataFrame({
-            'Kolom': data.columns,
-            'Tipe Data': data.dtypes,
-            'Missing Values': data.isnull().sum()
-        })
-        st.dataframe(col_info, use_container_width=True)
-    
-    # Footer
-    st.markdown("---")
-    st.markdown("""
-    <div style='text-align: center; color: gray; margin-top: 2rem;'>
-        <p>Dashboard E-Commerce Data Analysis | Dibuat dengan Streamlit</p>
-        <p>Data dibaca dari main_data.csv lokal</p>
-    </div>
-    """, unsafe_allow_html=True)
+    return loaded
 
+
+datasets = load_datasets()
+payments_df = datasets.get('payments')
+customers_df = datasets.get('customers')
+translation_df = datasets.get('translation')
+
+if payments_df is None:
+    st.error('File order_payments_dataset.csv atau main_data.csv tidak ditemukan. Pastikan file ada di folder data/ atau folder atas.')
 else:
-    st.error("Gagal memuat data. Silakan periksa file main_data.csv.")
+    # Basic cleaning similar to notebook
+    payments_df = payments_df.drop_duplicates()
+    if 'payment_value' in payments_df.columns:
+        payments_df = payments_df[payments_df['payment_value'] > 0]
+
+    # AOV by installment category (notebook logic)
+    def categorize_installments(x):
+        try:
+            x = int(x)
+        except Exception:
+            return 'Unknown'
+        if x == 1:
+            return 'Lunas (1x)'
+        elif x > 3:
+            return 'Cicilan > 3x'
+        else:
+            return 'Cicilan 2-3x'
+
+    payments_df['installment_category'] = payments_df.get('payment_installments', 0).apply(categorize_installments)
+    q1_summary = payments_df[payments_df['installment_category'].isin(['Lunas (1x)', 'Cicilan > 3x'])].groupby('installment_category')['payment_value'].mean().reset_index()
+
+    # Top 3 states outside SP (use customers_df)
+    top_3_states = None
+    if customers_df is not None and {'customer_unique_id', 'customer_state'}.issubset(set(customers_df.columns)):
+        other_states = customers_df[customers_df['customer_state'] != 'SP']
+        state_counts = other_states.groupby('customer_state')['customer_unique_id'].nunique().reset_index()
+        state_counts = state_counts.rename(columns={'customer_unique_id': 'unique_customers'})
+        top_3_states = state_counts.sort_values(by='unique_customers', ascending=False).head(3)
+    else:
+        st.warning('File customers_dataset.csv tidak ditemukan atau tidak memiliki kolom yang dibutuhkan; analisis per-state tidak tersedia.')
+
+    # Payment type performance
+    payment_perf = payments_df.groupby('payment_type').agg(
+        total_transactions=('order_id', 'count'),
+        total_revenue=('payment_value', 'sum')
+    ).reset_index().sort_values(by='total_revenue', ascending=False)
+
+    # Layout
+    st.markdown('---')
+    c1, c2, c3 = st.columns(3)
+    c1.metric('Total Transaksi', f"{payments_df['order_id'].nunique():,}")
+    if customers_df is not None and 'customer_unique_id' in customers_df.columns:
+        c2.metric('Total Pelanggan Unik', f"{customers_df['customer_unique_id'].nunique():,}")
+    else:
+        c2.metric('Total Pelanggan Unik', 'N/A')
+    c3.metric('Metode Pembayaran', f"{payments_df['payment_type'].nunique() if 'payment_type' in payments_df.columns else 0}")
+
+    tab1, tab2, tab3 = st.tabs(['AOV Cicilan', 'Top 3 States (Luar SP)', 'Payment Type Performance'])
+
+    with tab1:
+        st.subheader('Rata-rata Nilai Transaksi: Lunas vs Cicilan > 3x')
+        if not q1_summary.empty:
+            fig = px.bar(q1_summary, x='installment_category', y='payment_value', color='installment_category', text='payment_value')
+            fig.update_layout(yaxis_title='Rata-rata Payment Value', showlegend=False)
+            st.plotly_chart(fig, use_container_width=True)
+            st.write(q1_summary)
+        else:
+            st.info('Tidak ada data untuk kategori cicilan yang dipilih.')
+
+    with tab2:
+        st.subheader('Top 3 Negara Bagian dengan Pelanggan Unik (Luar SP)')
+        if top_3_states is not None and not top_3_states.empty:
+            fig = px.bar(top_3_states, x='customer_state', y='unique_customers', color='customer_state', text='unique_customers')
+            st.plotly_chart(fig, use_container_width=True)
+            st.write(top_3_states)
+        else:
+            st.info('Analisis per-state tidak tersedia.')
+
+    with tab3:
+        st.subheader('Performa Tipe Pembayaran')
+        if not payment_perf.empty:
+            fig = px.bar(payment_perf, x='payment_type', y='total_revenue', text='total_revenue', color='payment_type')
+            st.plotly_chart(fig, use_container_width=True)
+            st.dataframe(payment_perf)
+        else:
+            st.info('Tidak ada data pembayaran.')
+
+    st.markdown('---')
+    st.subheader('Informasi File & Kolom')
+    st.write('- payments file: ' + (str('order_payments' if payments_df is not None else 'missing')))
+    st.write('- customers file: ' + (str('customers_dataset' if customers_df is not None else 'missing')))
+    if payments_df is not None:
+        col_info = pd.DataFrame({'Kolom': payments_df.columns, 'Tipe': payments_df.dtypes, 'Missing': payments_df.isnull().sum().values})
+        st.dataframe(col_info)
